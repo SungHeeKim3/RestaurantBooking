@@ -1,0 +1,842 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>__msvc_chrono.hpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// __msvc_chrono.hpp internal header
+
+// Copyright (c) Microsoft Corporation.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#ifndef __MSVC_CHRONO_HPP
+#define __MSVC_CHRONO_HPP
+#include &lt;yvals.h&gt;
+#if _STL_COMPILER_PREPROCESSOR
+#include &lt;ctime&gt;
+#include &lt;limits&gt;
+#include &lt;ratio&gt;
+#include &lt;type_traits&gt;
+#include &lt;utility&gt;
+#include &lt;xtimec.h&gt;
+
+#if _HAS_CXX20
+#include &lt;compare&gt;
+#endif
+
+#pragma pack(push, _CRT_PACKING)
+#pragma warning(push, _STL_WARNING_LEVEL)
+#pragma warning(disable : _STL_DISABLED_WARNINGS)
+_STL_DISABLE_CLANG_WARNINGS
+#pragma push_macro("new")
+#undef new
+
+_STD_BEGIN
+namespace chrono {
+    _EXPORT_STD template &lt;class _Rep&gt;
+    struct treat_as_floating_point : is_floating_point&lt;_Rep&gt; {}; // tests for floating-point type
+
+    _EXPORT_STD template &lt;class _Rep&gt;
+    _INLINE_VAR constexpr bool treat_as_floating_point_v = treat_as_floating_point&lt;_Rep&gt;::value;
+
+    _EXPORT_STD template &lt;class _Rep&gt;
+    struct duration_values { // gets arithmetic properties of a type
+        _NODISCARD static constexpr _Rep zero() noexcept {
+            // get zero value
+            return _Rep(0);
+        }
+
+        _NODISCARD static constexpr _Rep(min)() noexcept {
+            // get smallest value
+            return numeric_limits&lt;_Rep&gt;::lowest();
+        }
+
+        _NODISCARD static constexpr _Rep(max)() noexcept {
+            // get largest value
+            return (numeric_limits&lt;_Rep&gt;::max)();
+        }
+    };
+
+#if _HAS_CXX20
+    template &lt;class _Clock, class = void&gt;
+    inline constexpr bool _Is_clock_v = false;
+
+    template &lt;class _Clock&gt;
+    inline constexpr bool
+        _Is_clock_v&lt;_Clock, void_t&lt;typename _Clock::rep, typename _Clock::period, typename _Clock::duration,
+                                typename _Clock::time_point, decltype(_Clock::is_steady), decltype(_Clock::now())&gt;&gt; =
+            true; // TRANSITION, GH-602
+
+    _EXPORT_STD template &lt;class _Clock&gt;
+    struct is_clock : bool_constant&lt;_Is_clock_v&lt;_Clock&gt;&gt; {};
+    _EXPORT_STD template &lt;class _Clock&gt;
+    inline constexpr bool is_clock_v = _Is_clock_v&lt;_Clock&gt;;
+#endif // _HAS_CXX20
+
+    _EXPORT_STD template &lt;class _Rep, class _Period = ratio&lt;1&gt;&gt;
+    class duration;
+
+    template &lt;class _Ty&gt;
+    _INLINE_VAR constexpr bool _Is_duration_v = _Is_specialization_v&lt;_Ty, duration&gt;;
+
+    _EXPORT_STD template &lt;class _To, class _Rep, class _Period, enable_if_t&lt;_Is_duration_v&lt;_To&gt;, int&gt; = 0&gt;
+    constexpr _To duration_cast(const duration&lt;_Rep, _Period&gt;&amp;) noexcept(
+        is_arithmetic_v&lt;_Rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _To::rep&gt;); // strengthened
+
+    _EXPORT_STD template &lt;class _Rep, class _Period&gt;
+    class duration { // represents a time duration
+    public:
+        using rep    = _Rep;
+        using period = typename _Period::type;
+
+        static_assert(!_Is_duration_v&lt;_Rep&gt;, "duration can't have duration as first template argument");
+        static_assert(_Is_ratio_v&lt;_Period&gt;, "period not an instance of std::ratio");
+        static_assert(0 &lt; _Period::num, "period negative or zero");
+
+        constexpr duration() = default;
+
+        template &lt;class _Rep2,
+            enable_if_t&lt;is_convertible_v&lt;const _Rep2&amp;, _Rep&gt;
+                            &amp;&amp; (treat_as_floating_point_v&lt;_Rep&gt; || !treat_as_floating_point_v&lt;_Rep2&gt;),
+                int&gt; = 0&gt;
+        constexpr explicit duration(const _Rep2&amp; _Val) noexcept(
+            is_arithmetic_v&lt;_Rep&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) // strengthened
+<span style = "background-color:#dfd">            : _MyRep(static_cast&lt;_Rep&gt;(_Val)) {}</span>
+
+        template &lt;class _Rep2, class _Period2,
+            enable_if_t&lt;treat_as_floating_point_v&lt;_Rep&gt;
+                            || (_Ratio_divide_sfinae&lt;_Period2, _Period&gt;::den == 1 &amp;&amp; !treat_as_floating_point_v&lt;_Rep2&gt;),
+                int&gt; = 0&gt;
+        constexpr duration(const duration&lt;_Rep2, _Period2&gt;&amp; _Dur) noexcept(
+            is_arithmetic_v&lt;_Rep&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) // strengthened
+<span style = "background-color:#dfd">            : _MyRep(_CHRONO duration_cast&lt;duration&gt;(_Dur).count()) {}</span>
+
+<span style = "background-color:#dfd">        _NODISCARD constexpr _Rep count() const noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            return _MyRep;
+        }</span>
+
+        _NODISCARD constexpr common_type_t&lt;duration&gt; operator+() const
+            noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            return common_type_t&lt;duration&gt;(*this);
+        }
+
+        _NODISCARD constexpr common_type_t&lt;duration&gt; operator-() const
+            noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            return common_type_t&lt;duration&gt;(-_MyRep);
+        }
+
+        _CONSTEXPR17 duration&amp; operator++() noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            ++_MyRep;
+            return *this;
+        }
+
+        _CONSTEXPR17 duration operator++(int) noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            return duration(_MyRep++);
+        }
+
+        _CONSTEXPR17 duration&amp; operator--() noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            --_MyRep;
+            return *this;
+        }
+
+        _CONSTEXPR17 duration operator--(int) noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            return duration(_MyRep--);
+        }
+
+        _CONSTEXPR17 duration&amp; operator+=(const duration&amp; _Right) noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            _MyRep += _Right._MyRep;
+            return *this;
+        }
+
+        _CONSTEXPR17 duration&amp; operator-=(const duration&amp; _Right) noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            _MyRep -= _Right._MyRep;
+            return *this;
+        }
+
+        _CONSTEXPR17 duration&amp; operator*=(const _Rep&amp; _Right) noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            _MyRep *= _Right;
+            return *this;
+        }
+
+        _CONSTEXPR17 duration&amp; operator/=(const _Rep&amp; _Right) noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            _MyRep /= _Right;
+            return *this;
+        }
+
+        _CONSTEXPR17 duration&amp; operator%=(const _Rep&amp; _Right) noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            _MyRep %= _Right;
+            return *this;
+        }
+
+        _CONSTEXPR17 duration&amp; operator%=(const duration&amp; _Right) noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+            _MyRep %= _Right.count();
+            return *this;
+        }
+
+        _NODISCARD static constexpr duration zero() noexcept {
+            // get zero value
+            return duration(duration_values&lt;_Rep&gt;::zero());
+        }
+
+        _NODISCARD static constexpr duration(min)() noexcept {
+            // get minimum value
+            return duration((duration_values&lt;_Rep&gt;::min)());
+        }
+
+        _NODISCARD static constexpr duration(max)() noexcept {
+            // get maximum value
+            return duration((duration_values&lt;_Rep&gt;::max)());
+        }
+
+    private:
+        _Rep _MyRep; // the stored rep
+    };
+
+    _EXPORT_STD template &lt;class _Clock, class _Duration = typename _Clock::duration&gt;
+    class time_point { // represents a point in time
+    public:
+        using clock    = _Clock;
+        using duration = _Duration;
+        using rep      = typename _Duration::rep;
+        using period   = typename _Duration::period;
+
+        static_assert(_Is_duration_v&lt;_Duration&gt;,
+            "N4950 [time.point.general]/1 mandates Duration to be a specialization of chrono::duration.");
+
+        constexpr time_point() = default;
+
+<span style = "background-color:#dfd">        constexpr explicit time_point(const _Duration&amp; _Other) noexcept(is_arithmetic_v&lt;rep&gt;) // strengthened
+            : _MyDur(_Other) {}</span>
+
+        template &lt;class _Duration2, enable_if_t&lt;is_convertible_v&lt;_Duration2, _Duration&gt;, int&gt; = 0&gt;
+        constexpr time_point(const time_point&lt;_Clock, _Duration2&gt;&amp; _Tp) noexcept(
+            is_arithmetic_v&lt;rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration2::rep&gt;) // strengthened
+            : _MyDur(_Tp.time_since_epoch()) {}
+
+<span style = "background-color:#dfd">        _NODISCARD constexpr _Duration time_since_epoch() const noexcept(is_arithmetic_v&lt;rep&gt;) /* strengthened */ {
+            return _MyDur;
+        }</span>
+
+#if _HAS_CXX20
+        constexpr time_point&amp; operator++() noexcept(is_arithmetic_v&lt;rep&gt;) /* strengthened */ {
+            ++_MyDur;
+            return *this;
+        }
+        constexpr time_point operator++(int) noexcept(is_arithmetic_v&lt;rep&gt;) /* strengthened */ {
+            return time_point{_MyDur++};
+        }
+        constexpr time_point&amp; operator--() noexcept(is_arithmetic_v&lt;rep&gt;) /* strengthened */ {
+            --_MyDur;
+            return *this;
+        }
+        constexpr time_point operator--(int) noexcept(is_arithmetic_v&lt;rep&gt;) /* strengthened */ {
+            return time_point{_MyDur--};
+        }
+#endif // _HAS_CXX20
+
+        _CONSTEXPR17 time_point&amp; operator+=(const _Duration&amp; _Dur) noexcept(is_arithmetic_v&lt;rep&gt;) /* strengthened */ {
+            _MyDur += _Dur;
+            return *this;
+        }
+
+        _CONSTEXPR17 time_point&amp; operator-=(const _Duration&amp; _Dur) noexcept(is_arithmetic_v&lt;rep&gt;) /* strengthened */ {
+            _MyDur -= _Dur;
+            return *this;
+        }
+
+        _NODISCARD static constexpr time_point(min)() noexcept {
+            return time_point((_Duration::min)());
+        }
+
+        _NODISCARD static constexpr time_point(max)() noexcept {
+            return time_point((_Duration::max)());
+        }
+
+    private:
+        _Duration _MyDur{duration::zero()}; // duration since the epoch
+    };
+} // namespace chrono
+
+template &lt;class _Rep, class _Period&gt;
+_INLINE_VAR constexpr bool _Is_trivially_swappable_v&lt;chrono::duration&lt;_Rep, _Period&gt;&gt; = _Is_trivially_swappable_v&lt;_Rep&gt;;
+
+template &lt;class _Clock, class _Duration&gt;
+_INLINE_VAR constexpr bool _Is_trivially_swappable_v&lt;chrono::time_point&lt;_Clock, _Duration&gt;&gt; =
+    _Is_trivially_swappable_v&lt;_Duration&gt;;
+
+_NODISCARD constexpr intmax_t _Lcm(const intmax_t _Ax, const intmax_t _Bx) noexcept {
+    return (_Ax / _Gcd(_Ax, _Bx)) * _Bx;
+}
+
+template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+struct common_type&lt;_CHRONO duration&lt;_Rep1, _Period1&gt;, _CHRONO duration&lt;_Rep2, _Period2&gt;&gt; {
+    using type = _CHRONO duration&lt;common_type_t&lt;_Rep1, _Rep2&gt;,
+        ratio&lt;_Gcd(_Period1::num, _Period2::num), _Lcm(_Period1::den, _Period2::den)&gt;&gt;;
+};
+
+template &lt;class _Clock, class _Duration1, class _Duration2&gt;
+struct common_type&lt;_CHRONO time_point&lt;_Clock, _Duration1&gt;,
+    _CHRONO time_point&lt;_Clock, _Duration2&gt;&gt; { // common type of two time points
+    using type = _CHRONO time_point&lt;_Clock, common_type_t&lt;_Duration1, _Duration2&gt;&gt;;
+};
+
+namespace chrono {
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;
+        operator+(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        using _CD = common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;;
+        return _CD(_CD(_Left).count() + _CD(_Right).count());
+    }
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;
+        operator-(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+<span style = "background-color:#dfd">            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {</span>
+        using _CD = common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;;
+<span style = "background-color:#dfd">        return _CD(_CD(_Left).count() - _CD(_Right).count());
+    }</span>
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2,
+        enable_if_t&lt;is_convertible_v&lt;const _Rep2&amp;, common_type_t&lt;_Rep1, _Rep2&gt;&gt;, int&gt; = 0&gt;
+    _NODISCARD constexpr duration&lt;common_type_t&lt;_Rep1, _Rep2&gt;, _Period1&gt; operator*(
+        const duration&lt;_Rep1, _Period1&gt;&amp; _Left,
+        const _Rep2&amp; _Right) noexcept(is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        using _CR = common_type_t&lt;_Rep1, _Rep2&gt;;
+        using _CD = duration&lt;_CR, _Period1&gt;;
+        return _CD(_CD(_Left).count() * _Right);
+    }
+
+    _EXPORT_STD template &lt;class _Rep1, class _Rep2, class _Period2,
+        enable_if_t&lt;is_convertible_v&lt;const _Rep1&amp;, common_type_t&lt;_Rep1, _Rep2&gt;&gt;, int&gt; = 0&gt;
+    _NODISCARD constexpr duration&lt;common_type_t&lt;_Rep1, _Rep2&gt;, _Period2&gt;
+        operator*(const _Rep1&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        return _Right * _Left;
+    }
+
+    template &lt;class _CR, class _Period1, class _Rep2, bool = is_convertible_v&lt;const _Rep2&amp;, _CR&gt;&gt;
+    struct _Duration_div_mod1 { // return type for duration / rep and duration % rep
+        using type = duration&lt;_CR, _Period1&gt;;
+    };
+
+    template &lt;class _CR, class _Period1, class _Rep2&gt;
+    struct _Duration_div_mod1&lt;_CR, _Period1, _Rep2, false&gt; {}; // no return type
+
+    template &lt;class _CR, class _Period1, class _Rep2, bool = _Is_duration_v&lt;_Rep2&gt;&gt;
+    struct _Duration_div_mod {}; // no return type
+
+    template &lt;class _CR, class _Period1, class _Rep2&gt;
+    struct _Duration_div_mod&lt;_CR, _Period1, _Rep2, false&gt; : _Duration_div_mod1&lt;_CR, _Period1, _Rep2&gt; {
+        // return type for duration / rep and duration % rep
+    };
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2&gt;
+    _NODISCARD constexpr typename _Duration_div_mod&lt;common_type_t&lt;_Rep1, _Rep2&gt;, _Period1, _Rep2&gt;::type operator/(
+        const duration&lt;_Rep1, _Period1&gt;&amp; _Left,
+        const _Rep2&amp; _Right) noexcept(is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        using _CR = common_type_t&lt;_Rep1, _Rep2&gt;;
+        using _CD = duration&lt;_CR, _Period1&gt;;
+        return _CD(_CD(_Left).count() / _Right);
+    }
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr common_type_t&lt;_Rep1, _Rep2&gt;
+        operator/(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        using _CD = common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;;
+        return _CD(_Left).count() / _CD(_Right).count();
+    }
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2&gt;
+    _NODISCARD constexpr typename _Duration_div_mod&lt;common_type_t&lt;_Rep1, _Rep2&gt;, _Period1, _Rep2&gt;::type operator%(
+        const duration&lt;_Rep1, _Period1&gt;&amp; _Left,
+        const _Rep2&amp; _Right) noexcept(is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        using _CR = common_type_t&lt;_Rep1, _Rep2&gt;;
+        using _CD = duration&lt;_CR, _Period1&gt;;
+        return _CD(_CD(_Left).count() % _Right);
+    }
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;
+        operator%(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        using _CD = common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;;
+        return _CD(_CD(_Left).count() % _CD(_Right).count());
+    }
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr bool
+        operator==(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        using _CT = common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;;
+        return _CT(_Left).count() == _CT(_Right).count();
+    }
+
+#if !_HAS_CXX20
+    template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr bool
+        operator!=(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        return !(_Left == _Right);
+    }
+#endif // !_HAS_CXX20
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr bool
+        operator&lt;(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        using _CT = common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;;
+        return _CT(_Left).count() &lt; _CT(_Right).count();
+    }
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr bool
+        operator&lt;=(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        return !(_Right &lt; _Left);
+    }
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr bool
+        operator&gt;(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        return _Right &lt; _Left;
+    }
+
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+    _NODISCARD constexpr bool
+        operator&gt;=(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        return !(_Left &lt; _Right);
+    }
+
+#ifdef __cpp_lib_concepts
+    _EXPORT_STD template &lt;class _Rep1, class _Period1, class _Rep2, class _Period2&gt;
+        requires three_way_comparable&lt;typename common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;::rep&gt;
+    _NODISCARD constexpr auto
+        operator&lt;=&gt;(const duration&lt;_Rep1, _Period1&gt;&amp; _Left, const duration&lt;_Rep2, _Period2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep1&gt;&amp;&amp; is_arithmetic_v&lt;_Rep2&gt;) /* strengthened */ {
+        using _CT = common_type_t&lt;duration&lt;_Rep1, _Period1&gt;, duration&lt;_Rep2, _Period2&gt;&gt;;
+        return _CT(_Left).count() &lt;=&gt; _CT(_Right).count();
+    }
+#endif // defined(__cpp_lib_concepts)
+
+    _EXPORT_STD template &lt;class _To, class _Rep, class _Period, enable_if_t&lt;_Is_duration_v&lt;_To&gt;, int&gt; /* = 0 */&gt;
+    _NODISCARD constexpr _To duration_cast(const duration&lt;_Rep, _Period&gt;&amp; _Dur) noexcept(
+<span style = "background-color:#dfd">        is_arithmetic_v&lt;_Rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _To::rep&gt;) /* strengthened */ {</span>
+        // convert duration to another duration; truncate
+        using _CF = ratio_divide&lt;_Period, typename _To::period&gt;;
+
+        using _ToRep = typename _To::rep;
+        using _CR    = common_type_t&lt;_ToRep, _Rep, intmax_t&gt;;
+
+<span style = "background-color:#dfd">        constexpr bool _Num_is_one = _CF::num == 1;
+        constexpr bool _Den_is_one = _CF::den == 1;</span>
+
+        if constexpr (_Den_is_one) {
+            if constexpr (_Num_is_one) {
+                return static_cast&lt;_To&gt;(static_cast&lt;_ToRep&gt;(_Dur.count()));
+            } else {
+<span style = "background-color:#dfd">                return static_cast&lt;_To&gt;(</span>
+                    static_cast&lt;_ToRep&gt;(static_cast&lt;_CR&gt;(_Dur.count()) * static_cast&lt;_CR&gt;(_CF::num)));
+            }
+        } else {
+            if constexpr (_Num_is_one) {
+<span style = "background-color:#dfd">                return static_cast&lt;_To&gt;(</span>
+                    static_cast&lt;_ToRep&gt;(static_cast&lt;_CR&gt;(_Dur.count()) / static_cast&lt;_CR&gt;(_CF::den)));
+            } else {
+                return static_cast&lt;_To&gt;(static_cast&lt;_ToRep&gt;(
+                    static_cast&lt;_CR&gt;(_Dur.count()) * static_cast&lt;_CR&gt;(_CF::num) / static_cast&lt;_CR&gt;(_CF::den)));
+            }
+        }
+<span style = "background-color:#dfd">    }</span>
+
+    _EXPORT_STD template &lt;class _To, class _Rep, class _Period, enable_if_t&lt;_Is_duration_v&lt;_To&gt;, int&gt; = 0&gt;
+    _NODISCARD constexpr _To floor(const duration&lt;_Rep, _Period&gt;&amp; _Dur) noexcept(
+        is_arithmetic_v&lt;_Rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _To::rep&gt;) /* strengthened */ {
+        // convert duration to another duration; round towards negative infinity
+        // i.e. the greatest integral result such that the result &lt;= _Dur
+        const _To _Casted{_CHRONO duration_cast&lt;_To&gt;(_Dur)};
+        if (_Casted &gt; _Dur) {
+            return _To{_Casted.count() - static_cast&lt;typename _To::rep&gt;(1)};
+        }
+
+        return _Casted;
+    }
+
+    _EXPORT_STD template &lt;class _To, class _Rep, class _Period, enable_if_t&lt;_Is_duration_v&lt;_To&gt;, int&gt; = 0&gt;
+    _NODISCARD constexpr _To ceil(const duration&lt;_Rep, _Period&gt;&amp; _Dur) noexcept(
+        is_arithmetic_v&lt;_Rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _To::rep&gt;) /* strengthened */ {
+        // convert duration to another duration; round towards positive infinity
+        // i.e. the least integral result such that _Dur &lt;= the result
+        const _To _Casted{_CHRONO duration_cast&lt;_To&gt;(_Dur)};
+        if (_Casted &lt; _Dur) {
+            return _To{_Casted.count() + static_cast&lt;typename _To::rep&gt;(1)};
+        }
+
+        return _Casted;
+    }
+
+    template &lt;class _Rep&gt;
+    constexpr bool _Is_even(_Rep _Val) noexcept(is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+        // Tests whether _Val is even
+        return _Val % 2 == 0;
+    }
+
+    _EXPORT_STD template &lt;class _To, class _Rep, class _Period,
+        enable_if_t&lt;_Is_duration_v&lt;_To&gt; &amp;&amp; !treat_as_floating_point_v&lt;typename _To::rep&gt;, int&gt; = 0&gt;
+    _NODISCARD constexpr _To round(const duration&lt;_Rep, _Period&gt;&amp; _Dur) noexcept(
+        is_arithmetic_v&lt;_Rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _To::rep&gt;) /* strengthened */ {
+        // convert duration to another duration, round to nearest, ties to even
+        const _To _Floored{_CHRONO floor&lt;_To&gt;(_Dur)};
+        const _To _Ceiled{_Floored + _To{1}};
+        const auto _Floor_adjustment = _Dur - _Floored;
+        const auto _Ceil_adjustment  = _Ceiled - _Dur;
+        if (_Floor_adjustment &lt; _Ceil_adjustment
+            || (_Floor_adjustment == _Ceil_adjustment &amp;&amp; _Is_even(_Floored.count()))) {
+            return _Floored;
+        }
+
+        return _Ceiled;
+    }
+
+    _EXPORT_STD template &lt;class _Rep, class _Period, enable_if_t&lt;numeric_limits&lt;_Rep&gt;::is_signed, int&gt; = 0&gt;
+    _NODISCARD constexpr duration&lt;_Rep, _Period&gt; abs(const duration&lt;_Rep, _Period&gt; _Dur) noexcept(
+        is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+        // create a duration whose count() is the absolute value of _Dur.count()
+        if (_Dur &lt; duration&lt;_Rep, _Period&gt;::zero()) {
+            return -_Dur;
+        } else {
+            return _Dur;
+        }
+    }
+
+    _EXPORT_STD using nanoseconds  = duration&lt;long long, nano&gt;;
+    _EXPORT_STD using microseconds = duration&lt;long long, micro&gt;;
+    _EXPORT_STD using milliseconds = duration&lt;long long, milli&gt;;
+    _EXPORT_STD using seconds      = duration&lt;long long&gt;;
+    _EXPORT_STD using minutes      = duration&lt;int, ratio&lt;60&gt;&gt;;
+    _EXPORT_STD using hours        = duration&lt;int, ratio&lt;3600&gt;&gt;;
+#if _HAS_CXX20
+    _EXPORT_STD using days   = duration&lt;int, ratio_multiply&lt;ratio&lt;24&gt;, hours::period&gt;&gt;;
+    _EXPORT_STD using weeks  = duration&lt;int, ratio_multiply&lt;ratio&lt;7&gt;, days::period&gt;&gt;;
+    _EXPORT_STD using years  = duration&lt;int, ratio_multiply&lt;ratio&lt;146097, 400&gt;, days::period&gt;&gt;;
+    _EXPORT_STD using months = duration&lt;int, ratio_divide&lt;years::period, ratio&lt;12&gt;&gt;&gt;;
+#endif // _HAS_CXX20
+
+    _EXPORT_STD template &lt;class _Clock, class _Duration, class _Rep, class _Period&gt;
+    _NODISCARD constexpr time_point&lt;_Clock, common_type_t&lt;_Duration, duration&lt;_Rep, _Period&gt;&gt;&gt;
+        operator+(const time_point&lt;_Clock, _Duration&gt;&amp; _Left, const duration&lt;_Rep, _Period&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;typename _Duration::rep&gt;&amp;&amp; is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+        using _RT = time_point&lt;_Clock, common_type_t&lt;_Duration, duration&lt;_Rep, _Period&gt;&gt;&gt;;
+        return _RT(_Left.time_since_epoch() + _Right);
+    }
+
+    _EXPORT_STD template &lt;class _Rep, class _Period, class _Clock, class _Duration&gt;
+    _NODISCARD constexpr time_point&lt;_Clock, common_type_t&lt;duration&lt;_Rep, _Period&gt;, _Duration&gt;&gt;
+        operator+(const duration&lt;_Rep, _Period&gt;&amp; _Left, const time_point&lt;_Clock, _Duration&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;_Rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration::rep&gt;) /* strengthened */ {
+        return _Right + _Left;
+    }
+
+    _EXPORT_STD template &lt;class _Clock, class _Duration, class _Rep, class _Period&gt;
+    _NODISCARD constexpr time_point&lt;_Clock, common_type_t&lt;_Duration, duration&lt;_Rep, _Period&gt;&gt;&gt;
+        operator-(const time_point&lt;_Clock, _Duration&gt;&amp; _Left, const duration&lt;_Rep, _Period&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;typename _Duration::rep&gt;&amp;&amp; is_arithmetic_v&lt;_Rep&gt;) /* strengthened */ {
+        using _RT = time_point&lt;_Clock, common_type_t&lt;_Duration, duration&lt;_Rep, _Period&gt;&gt;&gt;;
+        return _RT(_Left.time_since_epoch() - _Right);
+    }
+
+    _EXPORT_STD template &lt;class _Clock, class _Duration1, class _Duration2&gt;
+    _NODISCARD constexpr common_type_t&lt;_Duration1, _Duration2&gt;
+        operator-(const time_point&lt;_Clock, _Duration1&gt;&amp; _Left, const time_point&lt;_Clock, _Duration2&gt;&amp; _Right) noexcept(
+<span style = "background-color:#dfd">            is_arithmetic_v&lt;typename _Duration1::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration2::rep&gt;) /* strengthened */ {
+        return _Left.time_since_epoch() - _Right.time_since_epoch();
+    }</span>
+
+    _EXPORT_STD template &lt;class _Clock, class _Duration1, class _Duration2&gt;
+    _NODISCARD constexpr bool
+        operator==(const time_point&lt;_Clock, _Duration1&gt;&amp; _Left, const time_point&lt;_Clock, _Duration2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;typename _Duration1::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration2::rep&gt;) /* strengthened */ {
+        return _Left.time_since_epoch() == _Right.time_since_epoch();
+    }
+
+#if !_HAS_CXX20
+    template &lt;class _Clock, class _Duration1, class _Duration2&gt;
+    _NODISCARD constexpr bool
+        operator!=(const time_point&lt;_Clock, _Duration1&gt;&amp; _Left, const time_point&lt;_Clock, _Duration2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;typename _Duration1::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration2::rep&gt;) /* strengthened */ {
+        return !(_Left == _Right);
+    }
+#endif // !_HAS_CXX20
+
+    _EXPORT_STD template &lt;class _Clock, class _Duration1, class _Duration2&gt;
+    _NODISCARD constexpr bool
+        operator&lt;(const time_point&lt;_Clock, _Duration1&gt;&amp; _Left, const time_point&lt;_Clock, _Duration2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;typename _Duration1::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration2::rep&gt;) /* strengthened */ {
+        return _Left.time_since_epoch() &lt; _Right.time_since_epoch();
+    }
+
+    _EXPORT_STD template &lt;class _Clock, class _Duration1, class _Duration2&gt;
+    _NODISCARD constexpr bool
+        operator&lt;=(const time_point&lt;_Clock, _Duration1&gt;&amp; _Left, const time_point&lt;_Clock, _Duration2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;typename _Duration1::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration2::rep&gt;) /* strengthened */ {
+        return !(_Right &lt; _Left);
+    }
+
+    _EXPORT_STD template &lt;class _Clock, class _Duration1, class _Duration2&gt;
+    _NODISCARD constexpr bool
+        operator&gt;(const time_point&lt;_Clock, _Duration1&gt;&amp; _Left, const time_point&lt;_Clock, _Duration2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;typename _Duration1::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration2::rep&gt;) /* strengthened */ {
+        return _Right &lt; _Left;
+    }
+
+    _EXPORT_STD template &lt;class _Clock, class _Duration1, class _Duration2&gt;
+    _NODISCARD constexpr bool
+        operator&gt;=(const time_point&lt;_Clock, _Duration1&gt;&amp; _Left, const time_point&lt;_Clock, _Duration2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;typename _Duration1::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration2::rep&gt;) /* strengthened */ {
+        return !(_Left &lt; _Right);
+    }
+
+#ifdef __cpp_lib_concepts
+    _EXPORT_STD template &lt;class _Clock, class _Duration1, three_way_comparable_with&lt;_Duration1&gt; _Duration2&gt;
+    _NODISCARD constexpr auto
+        operator&lt;=&gt;(const time_point&lt;_Clock, _Duration1&gt;&amp; _Left, const time_point&lt;_Clock, _Duration2&gt;&amp; _Right) noexcept(
+            is_arithmetic_v&lt;typename _Duration1::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _Duration2::rep&gt;) /* strengthened */ {
+        return _Left.time_since_epoch() &lt;=&gt; _Right.time_since_epoch();
+    }
+#endif // defined(__cpp_lib_concepts)
+
+    _EXPORT_STD template &lt;class _To, class _Clock, class _Duration, enable_if_t&lt;_Is_duration_v&lt;_To&gt;, int&gt; = 0&gt;
+    _NODISCARD constexpr time_point&lt;_Clock, _To&gt; time_point_cast(const time_point&lt;_Clock, _Duration&gt;&amp; _Time) noexcept(
+        is_arithmetic_v&lt;typename _Duration::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _To::rep&gt;) /* strengthened */ {
+        // change the duration type of a time_point; truncate
+        return time_point&lt;_Clock, _To&gt;(_CHRONO duration_cast&lt;_To&gt;(_Time.time_since_epoch()));
+    }
+
+    _EXPORT_STD template &lt;class _To, class _Clock, class _Duration, enable_if_t&lt;_Is_duration_v&lt;_To&gt;, int&gt; = 0&gt;
+    _NODISCARD constexpr time_point&lt;_Clock, _To&gt; floor(const time_point&lt;_Clock, _Duration&gt;&amp; _Time) noexcept(
+        is_arithmetic_v&lt;typename _Duration::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _To::rep&gt;) /* strengthened */ {
+        // change the duration type of a time_point; round towards negative infinity
+        return time_point&lt;_Clock, _To&gt;(_CHRONO floor&lt;_To&gt;(_Time.time_since_epoch()));
+    }
+
+    _EXPORT_STD template &lt;class _To, class _Clock, class _Duration, enable_if_t&lt;_Is_duration_v&lt;_To&gt;, int&gt; = 0&gt;
+    _NODISCARD constexpr time_point&lt;_Clock, _To&gt; ceil(const time_point&lt;_Clock, _Duration&gt;&amp; _Time) noexcept(
+        is_arithmetic_v&lt;typename _Duration::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _To::rep&gt;) /* strengthened */ {
+        // change the duration type of a time_point; round towards positive infinity
+        return time_point&lt;_Clock, _To&gt;(_CHRONO ceil&lt;_To&gt;(_Time.time_since_epoch()));
+    }
+
+    _EXPORT_STD template &lt;class _To, class _Clock, class _Duration,
+        enable_if_t&lt;_Is_duration_v&lt;_To&gt; &amp;&amp; !treat_as_floating_point_v&lt;typename _To::rep&gt;, int&gt; = 0&gt;
+    _NODISCARD constexpr time_point&lt;_Clock, _To&gt; round(const time_point&lt;_Clock, _Duration&gt;&amp; _Time) noexcept(
+        is_arithmetic_v&lt;typename _Duration::rep&gt;&amp;&amp; is_arithmetic_v&lt;typename _To::rep&gt;) /* strengthened */ {
+        // change the duration type of a time_point; round to nearest, ties to even
+        return time_point&lt;_Clock, _To&gt;(_CHRONO round&lt;_To&gt;(_Time.time_since_epoch()));
+    }
+
+    _EXPORT_STD struct system_clock { // wraps GetSystemTimePreciseAsFileTime/GetSystemTimeAsFileTime
+        using rep                       = long long;
+        using period                    = ratio&lt;1, 10'000'000&gt;; // 100 nanoseconds
+        using duration                  = _CHRONO duration&lt;rep, period&gt;;
+        using time_point                = _CHRONO time_point&lt;system_clock&gt;;
+        static constexpr bool is_steady = false;
+
+<span style = "background-color:#dfd">        _NODISCARD static time_point now() noexcept { // get current time
+            return time_point(duration(_Xtime_get_ticks()));
+        }</span>
+
+        _NODISCARD static __time64_t to_time_t(const time_point&amp; _Time) noexcept { // convert to __time64_t
+            return duration_cast&lt;seconds&gt;(_Time.time_since_epoch()).count();
+        }
+
+<span style = "background-color:#dfd">        _NODISCARD static time_point from_time_t(__time64_t _Tm) noexcept { // convert from __time64_t
+            return time_point{seconds{_Tm}};
+        }</span>
+    };
+
+#if _HAS_CXX20
+    _EXPORT_STD template &lt;class _Duration&gt;
+    using sys_time                = time_point&lt;system_clock, _Duration&gt;;
+    _EXPORT_STD using sys_seconds = sys_time&lt;seconds&gt;;
+    _EXPORT_STD using sys_days    = sys_time&lt;days&gt;;
+#endif // _HAS_CXX20
+
+    _EXPORT_STD struct steady_clock { // wraps QueryPerformanceCounter
+        using rep                       = long long;
+        using period                    = nano;
+        using duration                  = nanoseconds;
+        using time_point                = _CHRONO time_point&lt;steady_clock&gt;;
+        static constexpr bool is_steady = true;
+
+#if defined(_M_ARM) || defined(_M_ARM64) // vvv ARM or ARM64 arch vvv
+#define _LIKELY_ARM_ARM64 _LIKELY
+#define _LIKELY_X86_X64
+#elif defined(_M_IX86) || defined(_M_X64) // ^^^ ARM or ARM64 arch / x86 or x64 arch vvv
+#define _LIKELY_ARM_ARM64
+#define _LIKELY_X86_X64 _LIKELY
+#else // ^^^ x86 or x64 arch / other arch vvv
+#define _LIKELY_ARM_ARM64
+#define _LIKELY_X86_X64
+#endif // ^^^ other arch ^^^
+<span style = "background-color:#dfd">        _NODISCARD static time_point now() noexcept { // get current time
+            const long long _Freq = _Query_perf_frequency(); // doesn't change after system boot
+            const long long _Ctr  = _Query_perf_counter();</span>
+            static_assert(period::num == 1, "This assumes period::num == 1.");
+            // The compiler recognizes the constants for frequency and time period and uses shifts and
+            // multiplies instead of divides to calculate the nanosecond value.
+<span style = "background-color:#dfd">            constexpr long long _TenMHz        = 10'000'000;
+            constexpr long long _TwentyFourMHz = 24'000'000;</span>
+            // clang-format off
+<span style = "background-color:#dfd">            if (_Freq == _TenMHz) _LIKELY_X86_X64 {</span>
+                // 10 MHz is a very common QPC frequency on modern x86/x64 PCs. Optimizing for
+                // this specific frequency can double the performance of this function by
+                // avoiding the expensive frequency conversion path.
+                static_assert(period::den % _TenMHz == 0, "It should never fail.");
+<span style = "background-color:#dfd">                constexpr long long _Multiplier = period::den / _TenMHz;
+                return time_point(duration(_Ctr * _Multiplier));</span>
+<span style = "background-color:#fdd">            } else if (_Freq == _TwentyFourMHz) _LIKELY_ARM_ARM64 {</span>
+                // 24 MHz is a common frequency on ARM/ARM64, including cases where it emulates x86/x64.
+<span style = "background-color:#fdd">                const long long _Whole = (_Ctr / _TwentyFourMHz) * period::den;
+                const long long _Part  = (_Ctr % _TwentyFourMHz) * period::den / _TwentyFourMHz;
+                return time_point(duration(_Whole + _Part));
+            } else {</span>
+                // Instead of just having "(_Ctr * period::den) / _Freq",
+                // the algorithm below prevents overflow when _Ctr is sufficiently large.
+                // It assumes that _Freq * period::den does not overflow, which is currently true for nano period.
+                // It is not realistic for _Ctr to accumulate to large values from zero with this assumption,
+                // but the initial value of _Ctr could be large.
+<span style = "background-color:#fdd">                const long long _Whole = (_Ctr / _Freq) * period::den;
+                const long long _Part  = (_Ctr % _Freq) * period::den / _Freq;
+                return time_point(duration(_Whole + _Part));</span>
+            }
+            // clang-format on
+<span style = "background-color:#dfd">        }</span>
+#undef _LIKELY_ARM_ARM64
+#undef _LIKELY_X86_X64
+    };
+
+    _EXPORT_STD using high_resolution_clock = steady_clock;
+} // namespace chrono
+
+template &lt;class _Rep, class _Period&gt;
+_NODISCARD bool _To_timespec64_sys_10_day_clamped(
+    _timespec64&amp; _Ts64, const _CHRONO duration&lt;_Rep, _Period&gt;&amp; _Rel_time) noexcept(is_arithmetic_v&lt;_Rep&gt;) {
+    // Convert duration to _timespec64 representing system time, maximum 10 days from now, returns whether clamping
+    // occurred. If clamped, timeouts will be transformed into spurious non-timeout wakes, due to ABI restrictions where
+    // the other side of the DLL boundary overflows int32_t milliseconds.
+    // Every function calling this one is TRANSITION, ABI
+    constexpr _CHRONO nanoseconds _Ten_days{_CHRONO hours{24} * 10};
+    constexpr _CHRONO duration&lt;double&gt; _Ten_days_d{_Ten_days};
+    _CHRONO nanoseconds _Tx0 = _CHRONO system_clock::duration{_Xtime_get_ticks()};
+    const bool _Clamped      = _Ten_days_d &lt; _Rel_time;
+    if (_Clamped) {
+        _Tx0 += _Ten_days;
+    } else {
+        _Tx0 += _CHRONO duration_cast&lt;_CHRONO nanoseconds&gt;(_Rel_time);
+    }
+
+    const auto _Whole_seconds = _CHRONO duration_cast&lt;_CHRONO seconds&gt;(_Tx0);
+    _Ts64.tv_sec              = _Whole_seconds.count();
+    _Tx0 -= _Whole_seconds;
+    _Ts64.tv_nsec = static_cast&lt;long&gt;(_Tx0.count());
+    return _Clamped;
+}
+
+inline namespace literals {
+    inline namespace chrono_literals {
+        _EXPORT_STD _NODISCARD constexpr _CHRONO hours operator""h(unsigned long long _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO hours(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO duration&lt;double, ratio&lt;3600&gt;&gt; operator""h(long double _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO duration&lt;double, ratio&lt;3600&gt;&gt;(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO minutes operator""min(unsigned long long _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO minutes(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO duration&lt;double, ratio&lt;60&gt;&gt; operator""min(long double _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO duration&lt;double, ratio&lt;60&gt;&gt;(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO seconds operator""s(unsigned long long _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO seconds(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO duration&lt;double&gt; operator""s(long double _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO duration&lt;double&gt;(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO milliseconds operator""ms(unsigned long long _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO milliseconds(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO duration&lt;double, milli&gt; operator""ms(long double _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO duration&lt;double, milli&gt;(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO microseconds operator""us(unsigned long long _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO microseconds(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO duration&lt;double, micro&gt; operator""us(long double _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO duration&lt;double, micro&gt;(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO nanoseconds operator""ns(unsigned long long _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO nanoseconds(_Val);
+        }
+
+        _EXPORT_STD _NODISCARD constexpr _CHRONO duration&lt;double, nano&gt; operator""ns(long double _Val) noexcept
+        /* strengthened */ {
+            return _CHRONO duration&lt;double, nano&gt;(_Val);
+        }
+    } // namespace chrono_literals
+} // namespace literals
+
+namespace chrono {
+    _EXPORT_STD using namespace literals::chrono_literals;
+} // namespace chrono
+_STD_END
+
+#pragma pop_macro("new")
+_STL_RESTORE_CLANG_WARNINGS
+#pragma warning(pop)
+#pragma pack(pop)
+#endif // _STL_COMPILER_PREPROCESSOR
+#endif // __MSVC_CHRONO_HPP</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>
